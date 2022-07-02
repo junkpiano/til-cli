@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/github"
 	"github.com/iancoleman/strcase"
@@ -25,18 +26,25 @@ func check(e error) {
 
 func fileLink(issue *github.Issue) string {
 	l := ""
+	t := (*issue.CreatedAt).Format("2006-01-02")
+	filename := strings.Join([]string{t, strconv.FormatInt(*issue.ID, 10)}, "-")
+	l += filename + ".md"
 
-	if len(issue.Labels) > 0 {
-		l += *issue.Labels[0].Name + "/"
-	}
+	return l
+}
 
-	l += strconv.FormatInt(*issue.ID, 10) + ".md"
+func parmaLink(issue *github.Issue) string {
+	l := ""
+	l += *issue.Labels[0].Name + "/"
+	t := (*issue.CreatedAt).Format("2006/01/02")
+	filename := strings.Join([]string{t, strconv.FormatInt(*issue.ID, 10)}, "/")
+	l += filename + ".html"
 
 	return l
 }
 
 func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
-	title := mkheader(1, "Today I Learned")
+	title := frontMatter("page", "Archives", time.Now())
 	tagline := fmt.Sprintf("*%d TILs, and counting...*", numberOfIssues)
 	categories := mkheader(2, "Category")
 	table := ""
@@ -51,7 +59,7 @@ func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
 		table += "\n"
 	}
 	content := fmt.Sprintf("%s%s\n\n%s\n\n%s\n", title, tagline, categories, table)
-	check(os.WriteFile("dist/README.md", []byte(content), 0644))
+	check(os.WriteFile("dist/archives.md", []byte(content), 0644))
 
 	fmt.Println(content)
 }
@@ -62,10 +70,18 @@ func mkheader(level int, str string) string {
 	return hashes
 }
 
+func mklink(title string, url string) string {
+	return fmt.Sprintf("[%s](%s)", title, url)
+}
+
+func frontMatter(layout string, title string, date time.Time) string {
+	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0900"))
+}
+
 func main() {
 	client := github.NewClient(nil)
 
-	issues, _, err := client.Issues.ListByRepo(context.Background(), "junkpiano", "til", nil)
+	issues, _, err := client.Issues.ListByRepo(context.Background(), "junkpiano", "til", &github.IssueListByRepoOptions{State: "closed"})
 
 	check(err)
 
@@ -73,20 +89,23 @@ func main() {
 	items := make(map[string][]IssueItem)
 	for _, issue := range issues {
 		if len(issue.Labels) == 0 || *issue.User.Login != "junkpiano" {
-			fmt.Println(*issue.ID, " is skipped since it's an invalid issue.")
+			fmt.Println(*issue.ID, "is skipped since it's an invalid issue.")
 			continue
 		}
 
 		category := *issue.Labels[0].Name
-
-		err := os.MkdirAll("dist/"+category, os.ModePerm)
+		filePrefix := "dist/"
+		filePostfix := "/_posts/"
+		err := os.MkdirAll(filePrefix+category+filePostfix, os.ModePerm)
 		check(err)
-		filePath := "dist/" + fileLink(issue)
+		filePath := filePrefix + category + filePostfix + fileLink(issue)
 
-		check(os.WriteFile(filePath, []byte(mkheader(1, *issue.Title)+*issue.Body+"\n"), 0644))
+		check(os.WriteFile(filePath, []byte(frontMatter("post", *issue.Title, *issue.CreatedAt)+*issue.Body+"\n\n---\n"+mklink("discussion", *issue.HTMLURL)+"\n"), 0644))
 
-		item := IssueItem{category, fileLink(issue), *issue.Title}
+		item := IssueItem{category, parmaLink(issue), *issue.Title}
 		items[category] = append(items[category], item)
 	}
-	generateReadme(len(issues), items)
+	if len(items) > 0 {
+		generateReadme(len(issues), items)
+	}
 }
