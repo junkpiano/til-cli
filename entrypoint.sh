@@ -6,3 +6,4 @@ echo "::set-output name=time::$time"
 
 /app/til-cli
 cp -r dist/* $GITHUB_WORKSPACE/
+rm -rf dist # clean up
