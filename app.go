@@ -75,7 +75,7 @@ func mklink(title string, url string) string {
 }
 
 func frontMatter(layout string, title string, date time.Time) string {
-	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0900"))
+	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0000"))
 }
 
 func main() {
