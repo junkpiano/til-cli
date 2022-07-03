@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -49,10 +50,17 @@ func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
 	categories := mkheader(2, "Category")
 	table := ""
 
-	for k, v := range items {
+	keys := make([]string, 0, len(items))
+	for k := range items {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
 		categories += "* [" + k + "](#" + k + ")\n"
 		table += mkheader(2, strcase.ToCamel(k))
-		for _, item := range v {
+		for _, item := range items[k] {
 			line := fmt.Sprintf("* [%s](%s) \n", item.title, item.path)
 			table += line
 		}
