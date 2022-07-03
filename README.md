@@ -1,21 +1,12 @@
-# Hello world docker action
+# TiL-ClI 
 
-このアクションは"Hello World"もしくは"Hello" + ログに挨拶する人物名を出力します。
+This action generates jekyll posts from github issues.
+Here is my weblog. -> <https://junkpiano.github.io/til>
 
-## Inputs
+Currently, this is meant to be used only in my blog.
 
-## `who-to-greet`
+## Usage
 
-**Required** The name of the person to greet. デフォルトは `"World"`。
-
-## Outputs
-
-## `time`
-
-The time we greeted you.
-
-## 使用例
-
-uses: actions/hello-world-docker-action@v1
-with:
-  who-to-greet: 'Mona the Octocat'
+```yaml
+uses: junkpiano/til-cli@v1
+```

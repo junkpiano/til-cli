@@ -1,15 +1,10 @@
 on: [push]
 
 jobs:
-  hello_world_job:
+  til-cli-test:
     runs-on: ubuntu-latest
-    name: A job to say hello
+    name: til-cli step test 
     steps:
-      - name: Hello world action step
-        id: hello
+      - name: til cli step 
+        id: til 
         uses: junkpiano/til-cli@master
-        with:
-          who-to-greet: 'Mona the Octocat'
-      # `hello` ステップからの出力を使用する
-      - name: Get the output time
-        run: echo "The time was ${{ steps.hello.outputs.time }}"
