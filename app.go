@@ -36,7 +36,9 @@ func fileLink(issue *github.Issue) string {
 
 func parmaLink(issue *github.Issue) string {
 	l := ""
-	l += *issue.Labels[0].Name + "/"
+    if len(issue.Labels) > 0 {
+	    l += *issue.Labels[0].Name + "/"
+    }
 	t := (*issue.CreatedAt).Format("2006/01/02")
 	filename := strings.Join([]string{t, strconv.FormatInt(*issue.ID, 10)}, "/")
 	l += filename + ".html"
@@ -45,20 +47,20 @@ func parmaLink(issue *github.Issue) string {
 }
 
 func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
-	title := frontMatter("page", "Archives", time.Now())
+	title := frontMatter("page", "Archives", "", time.Now())
 	tagline := fmt.Sprintf("*%d TILs, and counting...*", numberOfIssues)
 	categories := mkheader(2, "Category")
 	table := ""
 
 	keys := make([]string, 0, len(items))
 	for k := range items {
-		keys = append(keys, k)
+        keys = append(keys, k)
 	}
 
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		categories += "* [" + k + "](#" + k + ")\n"
+		categories += "* [" + strcase.ToCamel(k) + "](#" + k + ")\n"
 		table += mkheader(2, strcase.ToCamel(k))
 		for _, item := range items[k] {
 			line := fmt.Sprintf("* [%s](%s) \n", item.title, item.path)
@@ -82,8 +84,21 @@ func mklink(title string, url string) string {
 	return fmt.Sprintf("[%s](%s)", title, url)
 }
 
-func frontMatter(layout string, title string, date time.Time) string {
-	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0000"))
+func frontMatter(layout string, title string, category string, date time.Time) string {
+    return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\ncategory: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0000"), category)
+}
+
+func checkIssue(issue *github.Issue) bool {
+    if *issue.User.Login == "junkpiano" &&
+       issue.PullRequestLinks == nil &&
+       issue.Title != nil &&
+       issue.CreatedAt != nil &&
+       issue.Body != nil &&
+       issue.HTMLURL != nil {
+           return true
+       }
+
+       return false
 }
 
 func main() {
@@ -94,23 +109,31 @@ func main() {
 	check(err)
 
 	check(os.RemoveAll("dist"))
+    check(os.MkdirAll("dist/_posts", os.ModePerm))
 	items := make(map[string][]IssueItem)
 	for _, issue := range issues {
-		if len(issue.Labels) == 0 || *issue.User.Login != "junkpiano" {
+		if checkIssue(issue) == false {
 			fmt.Println(*issue.ID, "is skipped since it's an invalid issue.")
 			continue
 		}
 
-		category := *issue.Labels[0].Name
 		filePrefix := "dist/"
-		filePostfix := "/_posts/"
-		err := os.MkdirAll(filePrefix+category+filePostfix, os.ModePerm)
-		check(err)
-		filePath := filePrefix + category + filePostfix + fileLink(issue)
+		filePostfix := "_posts/"
+		check(os.MkdirAll(filePrefix+filePostfix, os.ModePerm))
+		filePath := filePrefix + filePostfix + fileLink(issue)
 
-		check(os.WriteFile(filePath, []byte(frontMatter("post", *issue.Title, *issue.CreatedAt)+*issue.Body+"\n\n---\n"+mklink("discussion", *issue.HTMLURL)+"\n"), 0644))
+        category := ""
+        if len(issue.Labels) > 0 {
+		    category = *issue.Labels[0].Name
+        }
 
-		item := IssueItem{category, parmaLink(issue), *issue.Title}
+		check(os.WriteFile(filePath, []byte(frontMatter("post", *issue.Title, category, *issue.CreatedAt)+*issue.Body+"\n\n---\n"+mklink("discussion", *issue.HTMLURL)+"\n"), 0644))
+
+        if len(issue.Labels) == 0 {
+		    category = "misc" 
+        }
+
+        item := IssueItem{category, parmaLink(issue), *issue.Title}
 		items[category] = append(items[category], item)
 	}
 	if len(items) > 0 {
