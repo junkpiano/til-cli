@@ -36,9 +36,9 @@ func fileLink(issue *github.Issue) string {
 
 func parmaLink(issue *github.Issue) string {
 	l := ""
-    if len(issue.Labels) > 0 {
-	    l += *issue.Labels[0].Name + "/"
-    }
+	if len(issue.Labels) > 0 {
+		l += *issue.Labels[0].Name + "/"
+	}
 	t := (*issue.CreatedAt).Format("2006/01/02")
 	filename := strings.Join([]string{t, strconv.FormatInt(*issue.ID, 10)}, "/")
 	l += filename + ".html"
@@ -54,7 +54,7 @@ func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
 
 	keys := make([]string, 0, len(items))
 	for k := range items {
-        keys = append(keys, k)
+		keys = append(keys, k)
 	}
 
 	sort.Strings(keys)
@@ -85,20 +85,20 @@ func mklink(title string, url string) string {
 }
 
 func frontMatter(layout string, title string, category string, date time.Time) string {
-    return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\ncategory: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0000"), category)
+	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\ncategory: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0000"), category)
 }
 
 func checkIssue(issue *github.Issue) bool {
-    if *issue.User.Login == "junkpiano" &&
-       issue.PullRequestLinks == nil &&
-       issue.Title != nil &&
-       issue.CreatedAt != nil &&
-       issue.Body != nil &&
-       issue.HTMLURL != nil {
-           return true
-       }
+	if *issue.User.Login == "junkpiano" &&
+		issue.PullRequestLinks == nil &&
+		issue.Title != nil &&
+		issue.CreatedAt != nil &&
+		issue.Body != nil &&
+		issue.HTMLURL != nil {
+		return true
+	}
 
-       return false
+	return false
 }
 
 func main() {
@@ -109,7 +109,7 @@ func main() {
 	check(err)
 
 	check(os.RemoveAll("dist"))
-    check(os.MkdirAll("dist/_posts", os.ModePerm))
+	check(os.MkdirAll("dist/_posts", os.ModePerm))
 	items := make(map[string][]IssueItem)
 	for _, issue := range issues {
 		if checkIssue(issue) == false {
@@ -122,18 +122,18 @@ func main() {
 		check(os.MkdirAll(filePrefix+filePostfix, os.ModePerm))
 		filePath := filePrefix + filePostfix + fileLink(issue)
 
-        category := ""
-        if len(issue.Labels) > 0 {
-		    category = *issue.Labels[0].Name
-        }
+		category := ""
+		if len(issue.Labels) > 0 {
+			category = *issue.Labels[0].Name
+		}
 
 		check(os.WriteFile(filePath, []byte(frontMatter("post", *issue.Title, category, *issue.CreatedAt)+*issue.Body+"\n\n---\n"+mklink("discussion", *issue.HTMLURL)+"\n"), 0644))
 
-        if len(issue.Labels) == 0 {
-		    category = "misc" 
-        }
+		if len(issue.Labels) == 0 {
+			category = "misc"
+		}
 
-        item := IssueItem{category, parmaLink(issue), *issue.Title}
+		item := IssueItem{category, parmaLink(issue), *issue.Title}
 		items[category] = append(items[category], item)
 	}
 	if len(items) > 0 {
