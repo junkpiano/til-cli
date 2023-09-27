@@ -75,7 +75,7 @@ func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
 		categories += "* [" + key + "](#" + strings.ToLower(k) + ")\n"
 		table += mkheader(2, key)
 		for _, item := range items[k] {
-			line := fmt.Sprintf("* [%s](%s) \n", item.title, item.path)
+			line := fmt.Sprintf("* [%s](%s) \n", item.title, strings.ToLower(item.path))
 			table += line
 		}
 		table += "\n"
