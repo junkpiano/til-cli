@@ -46,6 +46,17 @@ func parmaLink(issue *github.Issue) string {
 	return l
 }
 
+func findReserved(key string) string {
+	reserved := make(map[string]string)
+	reserved["iOS"] = "iOS"
+
+	if val, ok := reserved[key]; ok {
+		return val
+	}
+
+	return strcase.ToCamel(key)
+}
+
 func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
 	title := frontMatter("page", "Archives", "", time.Now())
 	tagline := fmt.Sprintf("*%d TILs, and counting...*", numberOfIssues)
@@ -60,8 +71,9 @@ func generateReadme(numberOfIssues int, items map[string][]IssueItem) {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		categories += "* [" + strcase.ToCamel(k) + "](#" + k + ")\n"
-		table += mkheader(2, strcase.ToCamel(k))
+		key := findReserved(k)
+		categories += "* [" + key + "](#" + strings.ToLower(k) + ")\n"
+		table += mkheader(2, key)
 		for _, item := range items[k] {
 			line := fmt.Sprintf("* [%s](%s) \n", item.title, item.path)
 			table += line
