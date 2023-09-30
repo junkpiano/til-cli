@@ -8,5 +8,5 @@ Currently, this is meant to be used only in my blog.
 ## Usage
 
 ```yaml
-uses: junkpiano/til-cli@v1
+uses: junkpiano/til-cli@v1.0.2
 ```
