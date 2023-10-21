@@ -123,6 +123,8 @@ func main() {
 	check(os.RemoveAll("dist"))
 	check(os.MkdirAll("dist/_posts", os.ModePerm))
 	items := make(map[string][]IssueItem)
+	numberOfValidIssues := 0
+	
 	for _, issue := range issues {
 		if checkIssue(issue) == false {
 			fmt.Println(*issue.ID, "is skipped since it's an invalid issue.")
@@ -147,8 +149,9 @@ func main() {
 
 		item := IssueItem{category, parmaLink(issue), *issue.Title}
 		items[category] = append(items[category], item)
+		numberOfValidIssues++
 	}
 	if len(items) > 0 {
-		generateReadme(len(issues), items)
+		generateReadme(numberOfValidIssues, items)
 	}
 }
