@@ -96,8 +96,43 @@ func mklink(title string, url string) string {
 	return fmt.Sprintf("[%s](%s)", title, url)
 }
 
+// yamlString renders s as a YAML double-quoted scalar. Issue titles regularly
+// contain ':', quotes or leading metacharacters, which break front matter when
+// emitted as a bare scalar.
+func yamlString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// yamlValue quotes s unless it is empty, so an absent category stays nil rather
+// than becoming an empty string (which Liquid treats as truthy).
+func yamlValue(s string) string {
+	if s == "" {
+		return ""
+	}
+	return yamlString(s)
+}
+
 func frontMatter(layout string, title string, category string, date time.Time) string {
-	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\ncategory: %s\n---\n\n", layout, title, date.Format("2006-01-02 15:04:05 +0000"), category)
+	return fmt.Sprintf("---\nlayout: %s\ntitle: %s\ndate: %s\ncategory: %s\n---\n\n", layout, yamlValue(title), date.Format("2006-01-02 15:04:05 +0000"), yamlValue(category))
 }
 
 func checkIssue(issue *github.Issue) bool {
@@ -113,10 +148,45 @@ func checkIssue(issue *github.Issue) bool {
 	return false
 }
 
+// issueLister fetches one page of issues. It exists so the paging loop can be
+// exercised without talking to GitHub.
+type issueLister func(opts *github.IssueListByRepoOptions) ([]*github.Issue, *github.Response, error)
+
+// listAllIssues walks every page. Without this the API returns only the first
+// page, silently dropping every issue beyond it.
+func listAllIssues(list issueLister, opts *github.IssueListByRepoOptions) ([]*github.Issue, error) {
+	var all []*github.Issue
+
+	for {
+		issues, resp, err := list(opts)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, issues...)
+
+		// NextPage is 0 on the last page. Requiring it to advance also keeps a
+		// misbehaving response from looping forever.
+		if resp == nil || resp.NextPage <= opts.Page {
+			return all, nil
+		}
+
+		opts.Page = resp.NextPage
+	}
+}
+
 func main() {
 	client := github.NewClient(nil)
+	ctx := context.Background()
 
-	issues, _, err := client.Issues.ListByRepo(context.Background(), "junkpiano", "til", &github.IssueListByRepoOptions{State: "closed"})
+	opts := &github.IssueListByRepoOptions{
+		State:       "closed",
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+
+	issues, err := listAllIssues(func(o *github.IssueListByRepoOptions) ([]*github.Issue, *github.Response, error) {
+		return client.Issues.ListByRepo(ctx, "junkpiano", "til", o)
+	}, opts)
 
 	check(err)
 
@@ -124,7 +194,7 @@ func main() {
 	check(os.MkdirAll("dist/_posts", os.ModePerm))
 	items := make(map[string][]IssueItem)
 	numberOfValidIssues := 0
-	
+
 	for _, issue := range issues {
 		if checkIssue(issue) == false {
 			fmt.Println(*issue.ID, "is skipped since it's an invalid issue.")
