@@ -1,10 +1,63 @@
-on: [push]
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  til-cli-test:
+  test:
+    name: build & test
     runs-on: ubuntu-latest
-    name: til-cli step test 
     steps:
-      - name: til cli step 
-        id: til 
-        uses: junkpiano/til-cli@master
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: coverage summary
+        run: go tool cover -func=coverage.out
+
+      - name: go build
+        run: go build ./...
+
+  action:
+    name: docker action smoke test
+    # Runs the action from this checkout, not from master, so the container
+    # actually builds. Push-only: the run hits the GitHub API unauthenticated,
+    # and PRs from forks would trip the rate limit.
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: run til-cli
+        id: til
+        uses: ./
+
+      - name: check generated output
+        run: |
+          test -d _posts || { echo "_posts was not generated"; exit 1; }
+          test -f archives.md || { echo "archives.md was not generated"; exit 1; }
+          echo "generated $(find _posts -name '*.md' | wc -l) posts"

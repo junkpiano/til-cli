@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -382,5 +383,100 @@ func TestCheckIssue(t *testing.T) {
 	noBody.Body = nil
 	if checkIssue(noBody) {
 		t.Error("expected an issue without a body to be skipped")
+	}
+}
+
+func TestMkheader(t *testing.T) {
+	if got, want := mkheader(2, "Category"), "## Category\n\n"; got != want {
+		t.Errorf("mkheader(2, ...) = %q, want %q", got, want)
+	}
+	if got, want := mkheader(1, "Title"), "# Title\n\n"; got != want {
+		t.Errorf("mkheader(1, ...) = %q, want %q", got, want)
+	}
+}
+
+func TestMklink(t *testing.T) {
+	got := mklink("discussion", "https://github.com/junkpiano/til/issues/1")
+	want := "[discussion](https://github.com/junkpiano/til/issues/1)"
+	if got != want {
+		t.Errorf("mklink() = %q, want %q", got, want)
+	}
+}
+
+// chdir moves into a scratch directory for the duration of the test. Written
+// out by hand rather than using t.Chdir, which needs a newer Go than go.mod
+// declares.
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir to %s: %v", dir, err)
+	}
+
+	t.Cleanup(func() {
+		if err := os.Chdir(old); err != nil {
+			t.Fatalf("chdir back to %s: %v", old, err)
+		}
+	})
+}
+
+func TestGenerateReadme(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	if err := os.MkdirAll("dist", os.ModePerm); err != nil {
+		t.Fatalf("mkdir dist: %v", err)
+	}
+
+	items := map[string][]IssueItem{
+		"swift": {
+			{category: "swift", path: "Swift/2025/03/09/1.html", title: "Swift: value types"},
+		},
+		"iOS": {
+			{category: "iOS", path: "iOS/2025/03/10/2.html", title: "Background tasks"},
+			{category: "iOS", path: "iOS/2025/03/11/3.html", title: "Widgets"},
+		},
+	}
+
+	generateReadme(3, items)
+
+	raw, err := os.ReadFile("dist/archives.md")
+	if err != nil {
+		t.Fatalf("read archives.md: %v", err)
+	}
+	content := string(raw)
+
+	if !strings.HasPrefix(content, "---\nlayout: page\ntitle: \"Archives\"\n") {
+		t.Errorf("archives.md front matter =\n%s", content)
+	}
+	if !strings.Contains(content, "*3 TILs, and counting...*") {
+		t.Error("expected the TIL count in the tagline")
+	}
+
+	// Reserved category names keep their casing, others are camel cased, and
+	// the anchor stays lower case so the in-page link resolves.
+	for _, want := range []string{
+		"* [iOS](#ios)\n",
+		"* [Swift](#swift)\n",
+		"## iOS\n",
+		"## Swift\n",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in archives.md", want)
+		}
+	}
+
+	// Categories are emitted in sorted key order: "iOS" before "swift".
+	if strings.Index(content, "## iOS\n") > strings.Index(content, "## Swift\n") {
+		t.Error("expected categories sorted by key")
+	}
+
+	// Paths are lower cased in links, titles are left alone.
+	if !strings.Contains(content, "* [Background tasks](ios/2025/03/10/2.html)") {
+		t.Errorf("expected a lower cased item link, got\n%s", content)
 	}
 }
