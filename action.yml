@@ -1,6 +1,14 @@
 # action.yml
 name: 'til cli'
 description: 'generate my tech blog from github issue'
+inputs:
+  token:
+    description: >
+      Token used to read issues. Optional, but without it the API is called
+      anonymously and limited to 60 requests per hour per runner IP, shared
+      with every other Actions job on that host.
+    required: false
+    default: ''
 runs:
   using: 'docker'
   image: 'Dockerfile'

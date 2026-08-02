@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -383,6 +385,94 @@ func TestCheckIssue(t *testing.T) {
 	noBody.Body = nil
 	if checkIssue(noBody) {
 		t.Error("expected an issue without a body to be skipped")
+	}
+}
+
+// recordingTransport captures the request it was handed and returns a canned
+// response, so the Authorization header can be inspected without a network.
+type recordingTransport struct {
+	got *http.Request
+}
+
+func (r *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.got = req
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("{}")),
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+func TestTokenTransportSetsAuthorization(t *testing.T) {
+	rec := &recordingTransport{}
+	transport := tokenTransport{token: "s3cret", base: rec}
+
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/x/y/issues", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	if _, err := transport.RoundTrip(req); err != nil {
+		t.Fatalf("round trip: %v", err)
+	}
+
+	if got, want := rec.got.Header.Get("Authorization"), "token s3cret"; got != want {
+		t.Errorf("Authorization = %q, want %q", got, want)
+	}
+
+	// RoundTrip must not mutate the request it was given.
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("original request was mutated, Authorization = %q", got)
+	}
+}
+
+func TestResolveToken(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"input wins", map[string]string{"INPUT_TOKEN": "a", "GITHUB_TOKEN": "b"}, "a"},
+		{"falls back to ambient", map[string]string{"GITHUB_TOKEN": "b"}, "b"},
+		{"empty input falls through", map[string]string{"INPUT_TOKEN": "", "GITHUB_TOKEN": "b"}, "b"},
+		{"neither set", map[string]string{}, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveToken(func(key string) string { return tc.env[key] })
+			if got != tc.want {
+				t.Errorf("resolveToken() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// An empty token has to keep working: consumers on @v1 that never pass one must
+// not start failing.
+func TestNewHTTPClient(t *testing.T) {
+	if got := newHTTPClient(""); got != nil {
+		t.Errorf("newHTTPClient(\"\") = %v, want nil so the API is called anonymously", got)
+	}
+
+	client := newHTTPClient("s3cret")
+	if client == nil {
+		t.Fatal("newHTTPClient with a token returned nil")
+	}
+
+	transport, ok := client.Transport.(tokenTransport)
+	if !ok {
+		t.Fatalf("transport is %T, want tokenTransport", client.Transport)
+	}
+	if transport.token != "s3cret" {
+		t.Errorf("token = %q, want %q", transport.token, "s3cret")
+	}
+}
+
+func TestNewClientAcceptsEmptyToken(t *testing.T) {
+	if newClient("") == nil {
+		t.Error("newClient(\"\") returned nil")
 	}
 }
 

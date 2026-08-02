@@ -55,6 +55,10 @@ jobs:
       - name: run til-cli
         id: til
         uses: ./
+        with:
+          # Without this the run competes for the 60/hr anonymous quota shared
+          # by every Actions job on the runner's IP.
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: check generated output
         run: |
