@@ -240,6 +240,18 @@ func TestResolvePreservedCase(t *testing.T) {
 		t.Errorf("unset preserve-case = %v, want the built-in default", got)
 	}
 
+	// The runner leaves hyphens in input ids alone, so the env var is
+	// INPUT_PRESERVE-CASE rather than INPUT_PRESERVE_CASE.
+	hyphenated := resolvePreservedCase(func(key string) string {
+		if key == "INPUT_PRESERVE-CASE" {
+			return "GraphQL"
+		}
+		return ""
+	})
+	if len(hyphenated) != 1 || hyphenated[0] != "GraphQL" {
+		t.Errorf("hyphenated input = %v, want [GraphQL]", hyphenated)
+	}
+
 	got := resolvePreservedCase(func(string) string { return " GraphQL , iOS ,, " })
 	want := []string{"GraphQL", "iOS"}
 	if len(got) != len(want) {

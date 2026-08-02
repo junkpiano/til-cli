@@ -66,8 +66,19 @@ func findReserved(key string, preserved []string) string {
 
 // resolvePreservedCase reads the comma separated preserve-case input, falling
 // back to the built-in list when it is unset.
+//
+// The runner uppercases an input id and replaces spaces with underscores, but
+// leaves hyphens alone, so preserve-case arrives as INPUT_PRESERVE-CASE. Both
+// spellings are accepted so the input works however it is passed.
 func resolvePreservedCase(lookup func(string) string) []string {
-	raw := lookup("INPUT_PRESERVE_CASE")
+	raw := ""
+	for _, key := range []string{"INPUT_PRESERVE-CASE", "INPUT_PRESERVE_CASE"} {
+		if v := lookup(key); v != "" {
+			raw = v
+			break
+		}
+	}
+
 	if raw == "" {
 		return defaultPreservedCase
 	}
