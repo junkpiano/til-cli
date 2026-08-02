@@ -221,9 +221,110 @@ func TestFindReserved(t *testing.T) {
 	}
 
 	for in, want := range cases {
-		if got := findReserved(in); got != want {
+		if got := findReserved(in, defaultPreservedCase); got != want {
 			t.Errorf("findReserved(%q) = %q, want %q", in, got, want)
 		}
+	}
+
+	// A custom list replaces the default rather than adding to it.
+	if got, want := findReserved("GraphQL", []string{"GraphQL"}), "GraphQL"; got != want {
+		t.Errorf("findReserved with custom list = %q, want %q", got, want)
+	}
+	if got, want := findReserved("iOS", []string{"GraphQL"}), "IOS"; got != want {
+		t.Errorf("findReserved(\"iOS\") with custom list = %q, want %q", got, want)
+	}
+}
+
+func TestResolvePreservedCase(t *testing.T) {
+	if got := resolvePreservedCase(func(string) string { return "" }); len(got) != 1 || got[0] != "iOS" {
+		t.Errorf("unset preserve-case = %v, want the built-in default", got)
+	}
+
+	got := resolvePreservedCase(func(string) string { return " GraphQL , iOS ,, " })
+	want := []string{"GraphQL", "iOS"}
+	if len(got) != len(want) {
+		t.Fatalf("resolvePreservedCase() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("resolvePreservedCase()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseRepo(t *testing.T) {
+	repo, err := parseRepo("junkpiano/til")
+	if err != nil {
+		t.Fatalf("parseRepo: %v", err)
+	}
+	if repo.owner != "junkpiano" || repo.name != "til" {
+		t.Errorf("parseRepo() = %+v, want {junkpiano til}", repo)
+	}
+
+	for _, in := range []string{"", "til", "/til", "junkpiano/", "a/b/c"} {
+		if _, err := parseRepo(in); err == nil {
+			t.Errorf("parseRepo(%q) succeeded, want an error", in)
+		}
+	}
+}
+
+func TestResolveRepo(t *testing.T) {
+	env := func(m map[string]string) func(string) string {
+		return func(key string) string { return m[key] }
+	}
+
+	repo, err := resolveRepo(env(map[string]string{
+		"INPUT_REPOSITORY":  "someone/notes",
+		"GITHUB_REPOSITORY": "junkpiano/til-cli",
+	}))
+	if err != nil {
+		t.Fatalf("resolveRepo: %v", err)
+	}
+	if repo.owner != "someone" || repo.name != "notes" {
+		t.Errorf("input should win, got %+v", repo)
+	}
+
+	repo, err = resolveRepo(env(map[string]string{"GITHUB_REPOSITORY": "junkpiano/til"}))
+	if err != nil {
+		t.Fatalf("resolveRepo: %v", err)
+	}
+	if repo.owner != "junkpiano" || repo.name != "til" {
+		t.Errorf("fallback to GITHUB_REPOSITORY got %+v", repo)
+	}
+
+	if _, err := resolveRepo(env(map[string]string{})); err == nil {
+		t.Error("expected an error when neither is set")
+	}
+}
+
+func TestResolveAuthors(t *testing.T) {
+	repo := repoRef{owner: "junkpiano", name: "til"}
+	env := func(v string) func(string) string {
+		return func(key string) string {
+			if key == "INPUT_AUTHORS" {
+				return v
+			}
+			return ""
+		}
+	}
+
+	// Unset defaults to the owner, so a repo taking outside issues does not
+	// publish posts its owner never wrote.
+	if got := resolveAuthors(env(""), repo); len(got) != 1 || got[0] != "junkpiano" {
+		t.Errorf("unset authors = %v, want [junkpiano]", got)
+	}
+
+	if got := resolveAuthors(env("*"), repo); got != nil {
+		t.Errorf("authors=* = %v, want nil meaning anyone", got)
+	}
+
+	got := resolveAuthors(env("alice, bob"), repo)
+	if len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
+		t.Errorf("authors list = %v, want [alice bob]", got)
+	}
+
+	if got := resolveAuthors(env(" , "), repo); len(got) != 1 || got[0] != "junkpiano" {
+		t.Errorf("blank authors = %v, want the owner", got)
 	}
 }
 
@@ -365,25 +466,41 @@ func TestCheckIssue(t *testing.T) {
 		}
 	}
 
-	if !checkIssue(valid()) {
+	authors := []string{login}
+
+	if !checkIssue(valid(), authors) {
 		t.Error("expected a complete issue authored by junkpiano to be valid")
 	}
 
 	notMine := valid()
 	notMine.User = &github.User{Login: &other}
-	if checkIssue(notMine) {
+	if checkIssue(notMine, authors) {
 		t.Error("expected an issue from another author to be skipped")
+	}
+
+	// A nil author list publishes anyone's issues.
+	if !checkIssue(notMine, nil) {
+		t.Error("expected any author to be accepted when the filter is disabled")
+	}
+
+	noUser := valid()
+	noUser.User = nil
+	if checkIssue(noUser, authors) {
+		t.Error("expected an issue without an author to be skipped")
+	}
+	if checkIssue(noUser, nil) {
+		t.Error("expected an issue without an author to be skipped even with no filter")
 	}
 
 	pr := valid()
 	pr.PullRequestLinks = &github.PullRequestLinks{}
-	if checkIssue(pr) {
+	if checkIssue(pr, authors) {
 		t.Error("expected a pull request to be skipped")
 	}
 
 	noBody := valid()
 	noBody.Body = nil
-	if checkIssue(noBody) {
+	if checkIssue(noBody, authors) {
 		t.Error("expected an issue without a body to be skipped")
 	}
 }
@@ -532,7 +649,7 @@ func TestGenerateReadme(t *testing.T) {
 		},
 	}
 
-	generateReadme(3, items)
+	generateReadme(3, items, defaultPreservedCase)
 
 	raw, err := os.ReadFile("dist/archives.md")
 	if err != nil {
