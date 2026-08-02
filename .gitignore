@@ -25,3 +25,6 @@ go.work
 
 
 dist
+
+# Binary produced by `go build`, named after the module.
+/til-cli

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -175,8 +176,57 @@ func listAllIssues(list issueLister, opts *github.IssueListByRepoOptions) ([]*gi
 	}
 }
 
+// tokenTransport adds an Authorization header to every request.
+type tokenTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Clone rather than mutate: RoundTrip must not modify the caller's request.
+	clone := req.Clone(req.Context())
+	clone.Header.Set("Authorization", "token "+t.token)
+
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	return base.RoundTrip(clone)
+}
+
+// resolveToken prefers the action input, falling back to the ambient token so
+// the binary is also usable outside the action.
+func resolveToken(lookup func(string) string) string {
+	for _, key := range []string{"INPUT_TOKEN", "GITHUB_TOKEN"} {
+		if v := lookup(key); v != "" {
+			return v
+		}
+	}
+
+	return ""
+}
+
+// newHTTPClient returns nil for an empty token, which makes github.NewClient
+// fall back to an anonymous default client.
+func newHTTPClient(token string) *http.Client {
+	if token == "" {
+		return nil
+	}
+
+	return &http.Client{Transport: tokenTransport{token: token}}
+}
+
+// newClient authenticates when a token is available. Anonymous requests are
+// capped at 60 per hour per IP, shared with every other Actions job on the same
+// runner, which is not enough to be reliable: exhausting it used to fail the
+// run and take the published posts with it.
+func newClient(token string) *github.Client {
+	return github.NewClient(newHTTPClient(token))
+}
+
 func main() {
-	client := github.NewClient(nil)
+	client := newClient(resolveToken(os.Getenv))
 	ctx := context.Background()
 
 	opts := &github.IssueListByRepoOptions{
