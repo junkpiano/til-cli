@@ -59,6 +59,9 @@ jobs:
           # Without this the run competes for the 60/hr anonymous quota shared
           # by every Actions job on the runner's IP.
           token: ${{ secrets.GITHUB_TOKEN }}
+          # This repo has no closed issues to publish, so point the smoke test
+          # at one that does.
+          repository: junkpiano/til
 
       - name: check generated output
         run: |

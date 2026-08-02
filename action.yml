@@ -1,12 +1,31 @@
 # action.yml
 name: 'til cli'
-description: 'generate my tech blog from github issue'
+description: 'generate jekyll posts from github issues'
 inputs:
   token:
     description: >
       Token used to read issues. Optional, but without it the API is called
       anonymously and limited to 60 requests per hour per runner IP, shared
       with every other Actions job on that host.
+    required: false
+    default: ''
+  repository:
+    description: >
+      Repository to read issues from, as owner/name. Defaults to the repository
+      the workflow runs in.
+    required: false
+    default: ''
+  authors:
+    description: >
+      Comma separated logins whose issues get published. Defaults to the
+      repository owner, so issues opened by other people are ignored. Set to *
+      to publish issues from anyone.
+    required: false
+    default: ''
+  preserve-case:
+    description: >
+      Comma separated labels to use verbatim as category headings instead of
+      camel casing them, for names like iOS or GraphQL.
     required: false
     default: ''
 runs:
